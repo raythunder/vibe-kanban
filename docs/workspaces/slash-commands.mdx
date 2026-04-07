@@ -51,7 +51,7 @@ Any custom commands or skills you've installed will also appear in the typeahead
 
 ### OpenAI Codex
 
-Codex provides built-in commands. For full details, see the [Codex slash commands documentation](https://developers.openai.com/codex/cli/slash-commands/).
+Codex provides built-in commands, and the typeahead also includes locally installed skills for quick insertion. For full details, see the [Codex slash commands documentation](https://developers.openai.com/codex/cli/slash-commands/) and [Codex skills documentation](https://developers.openai.com/codex/skills/).
 
 | Command | Description |
 |---------|-------------|
@@ -59,6 +59,8 @@ Codex provides built-in commands. For full details, see the [Codex slash command
 | `/init` | Generate an AGENTS.md scaffold in the current directory |
 | `/status` | Display session configuration and token usage |
 | `/mcp` | List configured MCP tools |
+
+Any local Codex skills discovered from your configuration directories also appear in the typeahead. Selecting one inserts the matching `$skill-name` invocation into the composer.
 
 ### OpenCode
 

@@ -145,6 +145,7 @@ impl ClaudeCode {
             vec![
                 SlashCommandDescription {
                     name: "compact".to_string(),
+                    insert_text: None,
                     description: Some(
                         "Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarization]"
                             .to_string(),
@@ -152,10 +153,12 @@ impl ClaudeCode {
                 },
                 SlashCommandDescription {
                     name: "review".to_string(),
+                    insert_text: None,
                     description: Some("Review a pull request".to_string()),
                 },
                 SlashCommandDescription {
                     name: "security-review".to_string(),
+                    insert_text: None,
                     description: Some(
                         "Complete a security review of the pending changes on the current branch"
                             .to_string(),
@@ -163,28 +166,33 @@ impl ClaudeCode {
                 },
                 SlashCommandDescription {
                     name: "init".to_string(),
+                    insert_text: None,
                     description: Some(
                         "Initialize a new CLAUDE.md file with codebase documentation".to_string(),
                     ),
                 },
                 SlashCommandDescription {
                     name: "pr-comments".to_string(),
+                    insert_text: None,
                     description: Some("Get comments from a GitHub pull request".to_string()),
                 },
                 SlashCommandDescription {
                     name: "context".to_string(),
+                    insert_text: None,
                     description: Some(
                         "Visualize current context usage as a colored grid".to_string(),
                     ),
                 },
                 SlashCommandDescription {
                     name: "cost".to_string(),
+                    insert_text: None,
                     description: Some(
                         "Show the total cost and duration of the current session".to_string(),
                     ),
                 },
                 SlashCommandDescription {
                     name: "release-notes".to_string(),
+                    insert_text: None,
                     description: Some("View release notes".to_string()),
                 },
             ]
@@ -309,6 +317,7 @@ impl ClaudeCode {
             .filter(|name| !name.is_empty() && !builtin.contains(name) && seen.insert(name.clone()))
             .map(|name| SlashCommandDescription {
                 name,
+                insert_text: None,
                 description: None,
             })
             .collect();
@@ -327,6 +336,7 @@ impl ClaudeCode {
             .iter()
             .map(|cmd| SlashCommandDescription {
                 name: cmd.name.clone(),
+                insert_text: cmd.insert_text.clone(),
                 description: descriptions
                     .get(&cmd.name)
                     .cloned()

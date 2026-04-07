@@ -714,6 +714,7 @@ impl StandardCodingAgentExecutor for Opencode {
                         .into_iter()
                         .map(|cmd| SlashCommandDescription {
                             name: cmd.name.trim_start_matches('/').to_string(),
+                            insert_text: None,
                             description: cmd.description,
                         })
                         .filter(|cmd| seen.insert(cmd.name.clone()))

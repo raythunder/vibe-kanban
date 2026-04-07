@@ -17,6 +17,7 @@ import { TypeaheadMenu } from './TypeaheadMenu';
 
 export type SlashCommandDescriptionLike = {
   name: string;
+  insert_text?: string | null;
   description?: string | null;
 };
 
@@ -115,7 +116,7 @@ export function SlashCommandTypeaheadPlugin({
         editor.update(() => {
           if (!nodeToReplace) return;
 
-          const textToInsert = `/${option.command.name}`;
+          const textToInsert = option.command.insert_text ?? `/${option.command.name}`;
           const commandNode = $createTextNode(textToInsert);
           nodeToReplace.replace(commandNode);
 
@@ -164,6 +165,8 @@ export function SlashCommandTypeaheadPlugin({
                 )}
                 {options.map((option, index) => {
                   const details = option.command.description ?? null;
+                  const commandLabel =
+                    option.command.insert_text ?? `/${option.command.name}`;
 
                   return (
                     <TypeaheadMenu.Item
@@ -174,9 +177,7 @@ export function SlashCommandTypeaheadPlugin({
                       onClick={() => selectOptionAndCleanUp(option)}
                     >
                       <div className="flex items-center gap-half font-medium">
-                        <span className="font-mono">
-                          /{option.command.name}
-                        </span>
+                        <span className="font-mono">{commandLabel}</span>
                       </div>
                       {details && (
                         <div className="text-xs text-low truncate">

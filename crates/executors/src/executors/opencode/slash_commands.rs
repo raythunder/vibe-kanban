@@ -81,26 +81,32 @@ pub(super) fn hardcoded_slash_commands() -> Vec<SlashCommandDescription> {
     vec![
         SlashCommandDescription {
             name: "compact".to_string(),
+            insert_text: None,
             description: Some("compact the session".to_string()),
         },
         SlashCommandDescription {
             name: "commands".to_string(),
+            insert_text: None,
             description: Some("show all commands".to_string()),
         },
         SlashCommandDescription {
             name: "models".to_string(),
+            insert_text: None,
             description: Some("list models".to_string()),
         },
         SlashCommandDescription {
             name: "agents".to_string(),
+            insert_text: None,
             description: Some("list agents".to_string()),
         },
         SlashCommandDescription {
             name: "status".to_string(),
+            insert_text: None,
             description: Some("show status".to_string()),
         },
         SlashCommandDescription {
             name: "mcp".to_string(),
+            insert_text: None,
             description: Some("show MCP status".to_string()),
         },
     ]

@@ -48,6 +48,11 @@ pub mod utils;
 pub struct SlashCommandDescription {
     /// Command name without the leading slash, e.g. `help` for `/help`.
     pub name: String,
+    /// Optional custom text inserted into the composer when selected.
+    ///
+    /// When omitted, the UI inserts `/{name}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub insert_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }

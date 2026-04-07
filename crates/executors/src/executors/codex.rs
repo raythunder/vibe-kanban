@@ -24,6 +24,103 @@ pub fn codex_home() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".codex"))
 }
 
+fn extract_skill_description(content: &str) -> Option<String> {
+    if !content.starts_with("---") {
+        return None;
+    }
+
+    let end = content[3..].find("---")?;
+    let frontmatter = &content[3..3 + end];
+
+    for line in frontmatter.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("description:") {
+            return Some(rest.trim().to_string());
+        }
+    }
+
+    None
+}
+
+async fn read_skill_command(path: &Path) -> Option<SlashCommandDescription> {
+    let skill_name = path.file_name()?.to_str()?.to_string();
+    let skill_md = path.join("SKILL.md");
+    if !skill_md.exists() {
+        return None;
+    }
+
+    let description = match fs::read_to_string(&skill_md).await {
+        Ok(content) => extract_skill_description(&content),
+        Err(err) => {
+            tracing::warn!(
+                "Failed to read Codex skill metadata {:?}: {}",
+                skill_md,
+                err
+            );
+            None
+        }
+    };
+
+    Some(SlashCommandDescription {
+        name: skill_name.clone(),
+        insert_text: Some(format!("${skill_name}")),
+        description,
+    })
+}
+
+async fn discover_local_skill_commands(
+    workdir: Option<&Path>,
+    repo_path: Option<&Path>,
+) -> Vec<SlashCommandDescription> {
+    let mut directories = Vec::new();
+
+    if let Some(repo_path) = repo_path {
+        directories.push(repo_path.join(".codex/skills"));
+        directories.push(repo_path.join(".agents/skills"));
+    }
+
+    if let Some(workdir) = workdir {
+        directories.push(workdir.join(".codex/skills"));
+        directories.push(workdir.join(".agents/skills"));
+    }
+
+    if let Some(home) = codex_home() {
+        directories.push(home.join("skills"));
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        directories.push(home.join(".agents/skills"));
+    }
+
+    directories.push(PathBuf::from("/etc/codex/skills"));
+
+    let mut skill_commands = HashMap::new();
+    for directory in directories {
+        let Ok(mut entries) = fs::read_dir(&directory).await else {
+            continue;
+        };
+
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            if let Some(command) = read_skill_command(&path).await {
+                skill_commands.insert(command.name.clone(), command);
+            }
+        }
+    }
+
+    let builtin_command_names = ["compact", "init", "status", "mcp", "fast"];
+    let mut commands: Vec<_> = skill_commands
+        .into_values()
+        .filter(|command| !builtin_command_names.contains(&command.name.as_str()))
+        .collect();
+    commands.sort_by(|left, right| left.name.cmp(&right.name));
+    commands
+}
+
 pub(crate) fn resolve_model(model: Option<&str>) -> (Option<&str>, bool) {
     match model.and_then(|m| m.strip_suffix("-fast")) {
         Some(base) => (Some(base), true),
@@ -58,7 +155,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strum_macros::{AsRefStr, EnumString};
-use tokio::process::Command;
+use tokio::{fs, process::Command};
 use ts_rs::TS;
 use workspace_utils::{command_ext::GroupSpawnNoWindowExt, msg_store::MsgStore};
 
@@ -311,8 +408,8 @@ impl StandardCodingAgentExecutor for Codex {
 
     async fn discover_options(
         &self,
-        _workdir: Option<&std::path::Path>,
-        _repo_path: Option<&std::path::Path>,
+        workdir: Option<&std::path::Path>,
+        repo_path: Option<&std::path::Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
         let xhigh_reasoning_options = ReasoningOption::from_names(
             [
@@ -323,6 +420,42 @@ impl StandardCodingAgentExecutor for Codex {
             ]
             .map(|e| e.as_ref().to_string()),
         );
+        let mut slash_commands = vec![
+            SlashCommandDescription {
+                name: "compact".to_string(),
+                insert_text: None,
+                description: Some(
+                    "summarize conversation to prevent hitting the context limit".to_string(),
+                ),
+            },
+            SlashCommandDescription {
+                name: "init".to_string(),
+                insert_text: None,
+                description: Some(
+                    "create an AGENTS.md file with instructions for Codex".to_string(),
+                ),
+            },
+            SlashCommandDescription {
+                name: "status".to_string(),
+                insert_text: None,
+                description: Some(
+                    "show current session configuration and token usage".to_string(),
+                ),
+            },
+            SlashCommandDescription {
+                name: "mcp".to_string(),
+                insert_text: None,
+                description: Some("list configured MCP tools".to_string()),
+            },
+            SlashCommandDescription {
+                name: "fast".to_string(),
+                insert_text: None,
+                description: Some(
+                    "toggle fast mode for highest speed inference (2× plan usage). Use `/fast on` or `/fast off` to set explicitly".to_string(),
+                ),
+            },
+        ];
+        slash_commands.extend(discover_local_skill_commands(workdir, repo_path).await);
 
         let options = ExecutorDiscoveredOptions {
             model_selector: ModelSelectorConfig {
@@ -371,36 +504,7 @@ impl StandardCodingAgentExecutor for Codex {
                 ],
                 ..Default::default()
             },
-            slash_commands: vec![
-                SlashCommandDescription {
-                    name: "compact".to_string(),
-                    description: Some(
-                        "summarize conversation to prevent hitting the context limit".to_string(),
-                    ),
-                },
-                SlashCommandDescription {
-                    name: "init".to_string(),
-                    description: Some(
-                        "create an AGENTS.md file with instructions for Codex".to_string(),
-                    ),
-                },
-                SlashCommandDescription {
-                    name: "status".to_string(),
-                    description: Some(
-                        "show current session configuration and token usage".to_string(),
-                    ),
-                },
-                SlashCommandDescription {
-                    name: "mcp".to_string(),
-                    description: Some("list configured MCP tools".to_string()),
-                },
-                SlashCommandDescription {
-                    name: "fast".to_string(),
-                    description: Some(
-                        "toggle fast mode for highest speed inference (2× plan usage). Use `/fast on` or `/fast off` to set explicitly".to_string(),
-                    ),
-                },
-            ],
+            slash_commands,
             ..Default::default()
         };
         Ok(Box::pin(futures::stream::once(async move {
@@ -742,5 +846,31 @@ impl Codex {
             exit_signal: Some(exit_signal_rx),
             cancel: Some(cancel),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_skill_description;
+
+    #[test]
+    fn extracts_skill_description_from_frontmatter() {
+        let content = r#"---
+name: sample-skill
+description: Run the sample flow
+---
+
+# Sample
+"#;
+
+        assert_eq!(
+            extract_skill_description(content),
+            Some("Run the sample flow".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_skill_content_without_frontmatter() {
+        assert_eq!(extract_skill_description("# Sample"), None);
     }
 }

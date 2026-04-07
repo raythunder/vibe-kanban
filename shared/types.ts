@@ -595,7 +595,13 @@ export type SlashCommandDescription = {
 /**
  * Command name without the leading slash, e.g. `help` for `/help`.
  */
-name: string, description?: string | null, };
+name: string, 
+/**
+ * Optional custom text inserted into the composer when selected.
+ *
+ * When omitted, the UI inserts `/{name}`.
+ */
+insert_text?: string | null, description?: string | null, };
 
 export type AvailabilityInfo = { "type": "LOGIN_DETECTED", last_auth_timestamp: bigint, } | { "type": "INSTALLATION_FOUND" } | { "type": "NOT_FOUND" };
 
