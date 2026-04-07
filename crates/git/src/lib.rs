@@ -846,6 +846,19 @@ impl GitService {
         Ok(self.get_head_info(repo_path)?.branch)
     }
 
+    pub fn get_head_commit_message(
+        &self,
+        repo_path: &Path,
+    ) -> Result<Option<String>, GitServiceError> {
+        let repo = self.open_repo(repo_path)?;
+        let commit = repo.head()?.peel_to_commit()?;
+        Ok(commit
+            .message()
+            .map(str::trim)
+            .filter(|message| !message.is_empty())
+            .map(ToOwned::to_owned))
+    }
+
     /// Get the commit OID (as hex string) for a given branch without modifying HEAD
     pub fn get_branch_oid(
         &self,

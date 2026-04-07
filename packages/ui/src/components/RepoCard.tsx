@@ -38,6 +38,7 @@ const repoActionOptions: SplitButtonOption<RepoAction>[] = [
     icon: GitPullRequestIcon,
   },
   { value: 'link-pr', label: 'Link pull request', icon: LinkIcon },
+  { value: 'rebase', label: 'Rebase', icon: ArrowsClockwiseIcon },
   { value: 'merge', label: 'Merge', icon: GitMergeIcon },
 ];
 

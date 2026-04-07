@@ -207,6 +207,23 @@ fn commit_and_is_worktree_clean() {
 }
 
 #[test]
+fn get_head_commit_message_returns_latest_commit_message() {
+    let td = TempDir::new().unwrap();
+    let repo_path = init_repo_main(&td);
+    write_file(&repo_path, "message.txt", "hello\n");
+
+    let s = GitService::new();
+    s.commit(&repo_path, "feat: keep branch commit message\n\nbody line")
+        .unwrap();
+
+    let message = s.get_head_commit_message(&repo_path).unwrap();
+    assert_eq!(
+        message.as_deref(),
+        Some("feat: keep branch commit message\n\nbody line")
+    );
+}
+
+#[test]
 fn commit_in_detached_head_succeeds_via_service() {
     let td = TempDir::new().unwrap();
     let repo_path = init_repo_main(&td);

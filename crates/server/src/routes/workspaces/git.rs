@@ -165,6 +165,18 @@ async fn resolve_vibe_kanban_identifier(
     local_workspace_id.to_string()
 }
 
+fn build_merge_commit_message(
+    head_commit_message: Option<&str>,
+    workspace_label: &str,
+    vibe_kanban_id: &str,
+) -> String {
+    head_commit_message
+        .map(str::trim)
+        .filter(|message| !message.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("{workspace_label} (vibe-kanban {vibe_kanban_id})"))
+}
+
 #[axum::debug_handler]
 pub async fn stream_diff_ws(
     ws: SignedWsUpgrade,
@@ -221,7 +233,9 @@ pub async fn merge_workspace(
 
     let workspace_label = workspace.name.as_deref().unwrap_or(&workspace.branch);
     let vk_id = resolve_vibe_kanban_identifier(&deployment, workspace.id).await;
-    let commit_message = format!("{} (vibe-kanban {})", workspace_label, vk_id);
+    let head_commit_message = deployment.git().get_head_commit_message(&worktree_path)?;
+    let commit_message =
+        build_merge_commit_message(head_commit_message.as_deref(), workspace_label, &vk_id);
 
     let merge_commit_id = deployment.git().merge_changes(
         &repo.path,
@@ -263,6 +277,29 @@ pub async fn merge_workspace(
         .await;
 
     Ok(ResponseJson(ApiResponse::success(())))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_merge_commit_message;
+
+    #[test]
+    fn merge_commit_message_prefers_head_commit_message() {
+        let message = build_merge_commit_message(
+            Some("feat: preserve child branch commit message"),
+            "Workspace label",
+            "VK-123",
+        );
+
+        assert_eq!(message, "feat: preserve child branch commit message");
+    }
+
+    #[test]
+    fn merge_commit_message_falls_back_when_head_commit_message_missing() {
+        let message = build_merge_commit_message(None, "Workspace label", "VK-123");
+
+        assert_eq!(message, "Workspace label (vibe-kanban VK-123)");
+    }
 }
 
 pub async fn push_workspace_branch(
