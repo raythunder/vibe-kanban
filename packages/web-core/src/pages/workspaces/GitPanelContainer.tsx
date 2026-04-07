@@ -1,27 +1,17 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useActions } from '@/shared/hooks/useActions';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { usePush } from '@/shared/hooks/usePush';
-import { useRebase } from '@/shared/hooks/useRebase';
 import { useRenameBranch } from '@/shared/hooks/useRenameBranch';
 import { useBranchStatus } from '@/shared/hooks/useBranchStatus';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
 import { ForcePushDialog } from '@/shared/dialogs/command-bar/ForcePushDialog';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
-import { ResolveConflictsDialog } from '@/shared/dialogs/tasks/ResolveConflictsDialog';
 import { GitPanel, type RepoInfo } from '@vibe/ui/components/GitPanel';
 import { Actions } from '@/shared/actions';
 import type { RepoAction } from '@vibe/ui/components/RepoCard';
-import { workspacesApi, type Result } from '@/shared/lib/api';
-import type {
-  Workspace,
-  RepoWithTargetBranch,
-  Merge,
-  GitOperationError,
-} from 'shared/types';
-import { RebaseInProgressDialog } from '@vibe/ui/components/RebaseInProgressDialog';
+import type { Workspace, RepoWithTargetBranch, Merge } from 'shared/types';
 
 export interface GitPanelContainerProps {
   selectedWorkspace: Workspace | undefined;
@@ -34,7 +24,6 @@ export function GitPanelContainer({
   selectedWorkspace,
   repos,
 }: GitPanelContainerProps) {
-  const queryClient = useQueryClient();
   const { executeAction } = useActions();
   const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
   const repoActions = useUiPreferencesStore((s) => s.repoActions);
@@ -43,7 +32,6 @@ export function GitPanelContainer({
   // Hooks for branch management (moved from WorkspacesLayout)
   const renameBranch = useRenameBranch(selectedWorkspace?.id);
   const { data: branchStatus } = useBranchStatus(selectedWorkspace?.id);
-  const rebaseMutation = useRebase(selectedWorkspace?.id, undefined);
 
   // Get PR info from workspace summary (available immediately, no git calls needed)
   const summaryPr = useMemo(() => {
@@ -189,84 +177,6 @@ export function GitPanelContainer({
     };
   }, []);
 
-  const invalidateBranchStatus = useCallback(async () => {
-    if (!selectedWorkspace?.id) return;
-    await queryClient.invalidateQueries({
-      queryKey: ['branchStatus', selectedWorkspace.id],
-    });
-  }, [queryClient, selectedWorkspace?.id]);
-
-  const handleDirectRebase = useCallback(
-    async (repoId: string) => {
-      if (!selectedWorkspace?.id) return;
-
-      const repoInfo = repoInfos.find((repo) => repo.id === repoId);
-      if (!repoInfo) return;
-
-      const targetBranch = repoInfo.targetBranch;
-
-      try {
-        await rebaseMutation.mutateAsync({
-          repoId,
-          newBaseBranch: targetBranch,
-          oldBaseBranch: targetBranch,
-        });
-      } catch (err) {
-        const resultErr = err as Result<void, GitOperationError> | undefined;
-        const errorData =
-          resultErr && !resultErr.success ? resultErr.error : undefined;
-
-        if (errorData?.type === 'merge_conflicts') {
-          await ResolveConflictsDialog.show({
-            workspaceId: selectedWorkspace.id,
-            conflictOp: errorData.op,
-            sourceBranch: selectedWorkspace.branch,
-            targetBranch: errorData.target_branch,
-            conflictedFiles: errorData.conflicted_files,
-            repoName: repoInfo.name,
-          });
-          return;
-        }
-
-        if (errorData?.type === 'rebase_in_progress') {
-          await RebaseInProgressDialog.show({
-            targetBranch,
-            onContinue: async () => {
-              await workspacesApi.continueRebase(selectedWorkspace.id, {
-                repo_id: repoId,
-              });
-              await invalidateBranchStatus();
-            },
-            onAbort: async () => {
-              await workspacesApi.abortConflicts(selectedWorkspace.id, {
-                repo_id: repoId,
-              });
-              await invalidateBranchStatus();
-            },
-          });
-          return;
-        }
-
-        const message =
-          err instanceof Error ? err.message : 'Failed to rebase changes';
-        await ConfirmDialog.show({
-          title: 'Error',
-          message,
-          confirmText: 'OK',
-          showCancelButton: false,
-          variant: 'destructive',
-        });
-      }
-    },
-    [
-      invalidateBranchStatus,
-      rebaseMutation,
-      repoInfos,
-      selectedWorkspace?.branch,
-      selectedWorkspace?.id,
-    ]
-  );
-
   // Compute repoInfos with push button state
   const repoInfosWithPushButton = useMemo(
     () =>
@@ -305,16 +215,12 @@ export function GitPanelContainer({
     async (repoId: string, action: RepoAction) => {
       if (!selectedWorkspace?.id) return;
 
-      if (action === 'rebase') {
-        await handleDirectRebase(repoId);
-        return;
-      }
-
       // Map RepoAction to Action definitions
       const actionMap = {
         'pull-request': Actions.GitCreatePR,
         'link-pr': Actions.GitLinkPR,
         merge: Actions.GitMerge,
+        rebase: Actions.GitRebase,
         'change-target': Actions.GitChangeTarget,
         push: Actions.GitPush,
       };
@@ -325,7 +231,7 @@ export function GitPanelContainer({
       // Execute git action with workspaceId and repoId
       await executeAction(actionDef, selectedWorkspace.id, repoId);
     },
-    [selectedWorkspace, handleDirectRebase, executeAction]
+    [selectedWorkspace, executeAction]
   );
 
   // Handle push button click - use mutation for proper state tracking
