@@ -116,7 +116,8 @@ export function SlashCommandTypeaheadPlugin({
         editor.update(() => {
           if (!nodeToReplace) return;
 
-          const textToInsert = option.command.insert_text ?? `/${option.command.name}`;
+          const textToInsert =
+            option.command.insert_text ?? `/${option.command.name}`;
           const commandNode = $createTextNode(textToInsert);
           nodeToReplace.replace(commandNode);
 
@@ -147,48 +148,54 @@ export function SlashCommandTypeaheadPlugin({
             editorEl={editor.getRootElement()}
             onClickOutside={closeTypeahead}
           >
-            <TypeaheadMenu.Header>
-              <TerminalIcon className="size-icon-xs" weight="bold" />
-              {t('typeahead.commands')}
-            </TypeaheadMenu.Header>
+            <div className="w-[min(32rem,calc(100vw-1rem))] max-w-full">
+              <TypeaheadMenu.Header>
+                <TerminalIcon className="size-icon-xs" weight="bold" />
+                {t('typeahead.commands')}
+              </TypeaheadMenu.Header>
 
-            {isEmpty ? (
-              <TypeaheadMenu.Empty>
-                {t('typeahead.noCommands')}
-              </TypeaheadMenu.Empty>
-            ) : options.length === 0 && !showLoadingRow ? null : (
-              <TypeaheadMenu.ScrollArea>
-                {showLoadingRow && (
-                  <div className="px-base py-half text-sm text-low select-none">
-                    {loadingText}
-                  </div>
-                )}
-                {options.map((option, index) => {
-                  const details = option.command.description ?? null;
-                  const commandLabel =
-                    option.command.insert_text ?? `/${option.command.name}`;
+              {isEmpty ? (
+                <TypeaheadMenu.Empty>
+                  {t('typeahead.noCommands')}
+                </TypeaheadMenu.Empty>
+              ) : options.length === 0 && !showLoadingRow ? null : (
+                <TypeaheadMenu.ScrollArea>
+                  {showLoadingRow && (
+                    <div className="px-base py-half text-sm text-low select-none">
+                      {loadingText}
+                    </div>
+                  )}
+                  {options.map((option, index) => {
+                    const details = option.command.description ?? null;
+                    const commandLabel =
+                      option.command.insert_text ?? `/${option.command.name}`;
 
-                  return (
-                    <TypeaheadMenu.Item
-                      key={option.key}
-                      isSelected={index === selectedIndex}
-                      index={index}
-                      setHighlightedIndex={setHighlightedIndex}
-                      onClick={() => selectOptionAndCleanUp(option)}
-                    >
-                      <div className="flex items-center gap-half font-medium">
-                        <span className="font-mono">{commandLabel}</span>
-                      </div>
-                      {details && (
-                        <div className="text-xs text-low truncate">
-                          {details}
+                    return (
+                      <TypeaheadMenu.Item
+                        key={option.key}
+                        isSelected={index === selectedIndex}
+                        index={index}
+                        setHighlightedIndex={setHighlightedIndex}
+                        onClick={() => selectOptionAndCleanUp(option)}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-half font-medium">
+                            <span className="truncate font-mono">
+                              {commandLabel}
+                            </span>
+                          </div>
+                          {details && (
+                            <div className="truncate text-xs text-low">
+                              {details}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </TypeaheadMenu.Item>
-                  );
-                })}
-              </TypeaheadMenu.ScrollArea>
-            )}
+                      </TypeaheadMenu.Item>
+                    );
+                  })}
+                </TypeaheadMenu.ScrollArea>
+              )}
+            </div>
           </TypeaheadMenu>,
           document.body
         );
