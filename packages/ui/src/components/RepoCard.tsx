@@ -38,7 +38,6 @@ const repoActionOptions: SplitButtonOption<RepoAction>[] = [
     icon: GitPullRequestIcon,
   },
   { value: 'link-pr', label: 'Link pull request', icon: LinkIcon },
-  { value: 'rebase', label: 'Rebase', icon: ArrowsClockwiseIcon },
   { value: 'merge', label: 'Merge', icon: GitMergeIcon },
 ];
 
@@ -91,9 +90,11 @@ export function RepoCard({
   const { t } = useTranslation('tasks');
   const { t: tCommon } = useTranslation('common');
 
-  // Hide "Open pull request" and "Link pull request" when PR is already open
-  // Hide "Link pull request" when any PR is already linked (open or merged)
-  // Hide "merge" option when PR is already open or target branch is remote
+  // Keep the primary action list focused on the common end states.
+  // Rebase is still available from the branch menu and command palette.
+  // Hide "Open pull request" when a PR is already open.
+  // Hide "Link pull request" when any PR is already linked (open or merged).
+  // Hide "merge" when a PR is already open or the target branch is remote.
   const hasPrOpen = prStatus === 'open';
   const hasPrLinked = !!prNumber;
   const availableActionOptions = useMemo(
