@@ -176,18 +176,6 @@ jobs:
           VITE_POSTHOG_API_ENDPOINT: ${{ secrets.POSTHOG_API_ENDPOINT }}
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
-      - name: Create Sentry release
-        uses: getsentry/action-release@dab6548b3c03c4717878099e43782cf5be654289 # v3
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        with:
-          release: ${{ needs.bump-version.outputs.new_version }}
-          environment: production
-          sourcemaps: "./packages/local-web/dist"
-          ignore_missing: true
-
       - name: Upload frontend artifact
         uses: actions/upload-artifact@v6
         with:
@@ -374,17 +362,6 @@ jobs:
           # Without this, cmake-rs selects RelWithDebInfo and CMake fails when ASM is enabled.
           CARGO_PROFILE_RELEASE_DEBUG: 0
 
-      - name: Setup Sentry CLI
-        uses: matbour/setup-sentry-cli@3e938c54b3018bdd019973689ef984e033b0454b # v2
-        with:
-          token: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          organization: ${{ secrets.SENTRY_ORG }}
-          project: ${{ secrets.SENTRY_PROJECT }}
-          version: 2.21.2
-
-      - name: Upload source maps to Sentry
-        run: sentry-cli debug-files upload --include-sources target/${{ matrix.target }}/release
-
       - name: Prepare binaries (non-macOS)
         if: runner.os != 'macOS'
         shell: bash
@@ -400,89 +377,24 @@ jobs:
             cp target/${{ matrix.target }}/release/review dist/vibe-kanban-review-${{ matrix.name }}
           fi
 
-      # Code signing for macOS only
-      - name: Prepare Apple certificate (macOS)
+      - name: Package binaries (macOS)
         if: runner.os == 'macOS'
         run: |
-          echo "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" | base64 --decode > certificate.p12
-
-      - name: Write API Key to file
-        if: runner.os == 'macOS'
-        env:
-          API_KEY: ${{ secrets.APP_STORE_API_KEY }}
-        run: echo $API_KEY > app_store_key.json
-
-      - name: Sign main binary (macOS)
-        if: runner.os == 'macOS'
-        uses: BloopAI/apple-code-sign-action@v1
-        with:
-          input_path: target/${{ matrix.target }}/release/server
-          output_path: vibe-kanban
-          p12_file: certificate.p12
-          p12_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          sign: true
-          sign_args: "--code-signature-flags=runtime"
-
-      - name: Package main binary (macOS)
-        if: runner.os == 'macOS'
-        run: zip vibe-kanban.zip vibe-kanban
-
-      - name: Sign MCP binary (macOS)
-        if: runner.os == 'macOS'
-        uses: BloopAI/apple-code-sign-action@v1
-        with:
-          input_path: target/${{ matrix.target }}/release/vibe-kanban-mcp
-          output_path: vibe-kanban-mcp
-          p12_file: certificate.p12
-          p12_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          sign: true
-          sign_args: "--code-signature-flags=runtime"
-
-      - name: Package MCP binary (macOS)
-        if: runner.os == 'macOS'
-        run: zip vibe-kanban-mcp.zip vibe-kanban-mcp
-
-      - name: Sign Review binary (macOS)
-        if: runner.os == 'macOS'
-        uses: BloopAI/apple-code-sign-action@v1
-        with:
-          input_path: target/${{ matrix.target }}/release/review
-          output_path: vibe-kanban-review
-          p12_file: certificate.p12
-          p12_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          sign: true
-          sign_args: "--code-signature-flags=runtime"
-
-      - name: Package Review binary (macOS)
-        if: runner.os == 'macOS'
-        run: zip vibe-kanban-review.zip vibe-kanban-review
-
-      - name: Notarize signed binaries (macOS)
-        if: runner.os == 'macOS'
-        uses: BloopAI/apple-code-sign-action@main
-        continue-on-error: true
-        with:
-          input_path: |
-            vibe-kanban.zip
-            vibe-kanban-mcp.zip
-            vibe-kanban-review.zip
-          sign: false
-          notarize: true
-          app_store_connect_api_key_json_file: app_store_key.json
-
-      - name: Prepare signed binaries (macOS)
-        if: runner.os == 'macOS'
-        run: |
+          cp target/${{ matrix.target }}/release/server vibe-kanban
+          cp target/${{ matrix.target }}/release/vibe-kanban-mcp vibe-kanban-mcp
+          cp target/${{ matrix.target }}/release/review vibe-kanban-review
+          zip vibe-kanban.zip vibe-kanban
+          zip vibe-kanban-mcp.zip vibe-kanban-mcp
+          zip vibe-kanban-review.zip vibe-kanban-review
           mkdir -p dist
           cp vibe-kanban.zip dist/vibe-kanban-${{ matrix.name }}.zip
           cp vibe-kanban-mcp.zip dist/vibe-kanban-mcp-${{ matrix.name }}.zip
           cp vibe-kanban-review.zip dist/vibe-kanban-review-${{ matrix.name }}.zip
 
-      - name: Clean up certificates (macOS)
+      - name: Clean up packaged binaries (macOS)
         if: runner.os == 'macOS'
         run: |
-          rm -f certificate.p12
-          rm -rf private_keys/
+          rm -f vibe-kanban vibe-kanban-mcp vibe-kanban-review
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6
@@ -591,6 +503,7 @@ jobs:
           retention-days: 1
 
   upload-to-r2:
+    if: ${{ false }}
     needs: [bump-version, package-npx-cli]
     runs-on: ubuntu-24.04
     steps:
@@ -685,6 +598,7 @@ jobs:
             --recursive
 
   build-tauri:
+    if: ${{ false }}
     needs: [bump-version, build-frontend]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -995,6 +909,7 @@ jobs:
           cargo sweep --time 30
 
   upload-tauri-update:
+    if: ${{ false }}
     needs: [bump-version, build-tauri]
     runs-on: ubuntu-24.04
     steps:
@@ -1082,7 +997,7 @@ jobs:
           echo "Desktop manifest uploaded to: binaries/$TAG/tauri/desktop-manifest.json"
 
   create-prerelease:
-    needs: [bump-version, build-frontend, upload-to-r2, upload-tauri-update]
+    needs: [bump-version, build-frontend, package-npx-cli]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -1095,20 +1010,12 @@ jobs:
           name: frontend-dist
           path: packages/local-web/dist/
 
-      - name: Download Tauri artifacts for release
+      - name: Download NPX platform artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: tauri-artifacts-*
-          path: tauri-release/
+          pattern: npx-platform-*
+          path: npx-cli/dist/
           merge-multiple: true
-
-      - name: Collect Tauri installers for release
-        run: |
-          mkdir -p tauri-installers
-          find tauri-release \( -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.msi" -o -name "*-setup.exe" \) \
-            -exec cp {} tauri-installers/ \;
-          echo "Tauri installers for release:"
-          ls -la tauri-installers/ 2>/dev/null || echo "No installers found"
 
       - name: List downloaded artifacts
         run: |
@@ -1129,13 +1036,10 @@ jobs:
           cd npx-cli
           npm ci
 
-      - name: Build npx-cli TypeScript, inject secrets, and Pack
+      - name: Build npx-cli TypeScript and pack
         run: |
           cd npx-cli
           npm run build
-          # Replace placeholders in the bundled output
-          sed -i "s|__R2_PUBLIC_URL__|${{ secrets.R2_BINARIES_PUBLIC_URL }}|g" bin/cli.js
-          sed -i "s|__BINARY_TAG__|${{ needs.bump-version.outputs.new_tag }}|g" bin/cli.js
           npm pack
 
       - name: Create GitHub Pre-Release
@@ -1148,4 +1052,3 @@ jobs:
           files: |
             vibe-kanban-${{ needs.bump-version.outputs.new_tag }}.zip
             npx-cli/*.tgz
-            tauri-installers/*
