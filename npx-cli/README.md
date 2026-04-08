@@ -10,7 +10,7 @@ Run vibe kanban instantly without installation:
 npx @raythunder/vibe-kanban
 ```
 
-This will launch the application locally and open it in your browser automatically.
+This installs a small CLI wrapper first, then downloads the matching platform build from the latest GitHub release on first run. After that it launches the application locally and opens it in your browser automatically.
 
 Helpful entrypoints:
 
@@ -139,7 +139,9 @@ Vibe Kanban supports customization through its configuration system:
 ## Supported Platforms
 
 - Linux x64
+- Linux ARM64
 - Windows x64
+- Windows ARM64
 - macOS x64 (Intel)
 - macOS ARM64 (Apple Silicon)
 

@@ -4,12 +4,35 @@ import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 
-// Replaced during npm pack by workflow
-export const R2_BASE_URL = '__R2_PUBLIC_URL__';
-export const BINARY_TAG = '__BINARY_TAG__'; // e.g., v0.0.135-20251215122030
-export const CACHE_DIR = path.join(os.homedir(), '.vibe-kanban', 'bin');
+type PackageJson = {
+  name: string;
+  repository?: string | { url?: string };
+};
 
-// Local development mode: use binaries from npx-cli/dist/ instead of R2
+const packageJson = require('../package.json') as PackageJson;
+
+function parseGitHubRepo(repository: PackageJson['repository']): string {
+  const rawUrl =
+    typeof repository === 'string' ? repository : repository?.url ?? '';
+  const match = rawUrl.match(/github\.com[:/](.+?)(?:\.git)?\/?$/);
+
+  if (!match) {
+    throw new Error(`Unsupported GitHub repository URL: ${rawUrl}`);
+  }
+
+  return match[1];
+}
+
+// Replaced during npm pack by workflow.
+export const BINARY_TAG = '__BINARY_TAG__'; // e.g., v0.0.135-20251215122030
+export const PACKAGE_NAME = packageJson.name;
+export const GITHUB_REPO = parseGitHubRepo(packageJson.repository);
+export const RELEASE_BASE_URL = `https://github.com/${GITHUB_REPO}/releases/download/${BINARY_TAG}`;
+export const CACHE_DIR = path.join(os.homedir(), '.vibe-kanban', 'bin');
+export const BINARY_MANIFEST_NAME = 'binary-manifest.json';
+export const DESKTOP_MANIFEST_NAME = 'desktop-manifest.json';
+
+// Local development mode: use binaries from npx-cli/dist/ instead of GitHub Releases.
 // Only activate if dist/ exists (i.e., running from source after local-build.sh)
 export const LOCAL_DIST_DIR = path.join(__dirname, '..', 'dist');
 export const LOCAL_DEV_MODE =
@@ -17,6 +40,7 @@ export const LOCAL_DEV_MODE =
   process.env.VIBE_KANBAN_LOCAL === '1';
 
 export interface BinaryInfo {
+  file?: string;
   sha256: string;
   size: number;
 }
@@ -43,6 +67,21 @@ export interface DesktopBundleInfo {
 }
 
 type ProgressCallback = (downloaded: number, total: number) => void;
+
+function assertReleaseConfigured(): void {
+  if (!BINARY_TAG.startsWith('__')) {
+    return;
+  }
+
+  throw new Error(
+    'This CLI package is missing release metadata. Rebuild and republish the npm package before using release downloads.'
+  );
+}
+
+function getReleaseAssetUrl(fileName: string): string {
+  assertReleaseConfigured();
+  return `${RELEASE_BASE_URL}/${fileName}`;
+}
 
 function fetchJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -181,7 +220,7 @@ export async function ensureBinary(
   fs.mkdirSync(cacheDir, { recursive: true });
 
   const manifest = await fetchJson<BinaryManifest>(
-    `${R2_BASE_URL}/binaries/${BINARY_TAG}/manifest.json`
+    getReleaseAssetUrl(BINARY_MANIFEST_NAME)
   );
   const binaryInfo = manifest.platforms?.[platform]?.[binaryName];
 
@@ -191,7 +230,8 @@ export async function ensureBinary(
     );
   }
 
-  const url = `${R2_BASE_URL}/binaries/${BINARY_TAG}/${platform}/${binaryName}.zip`;
+  const fileName = binaryInfo.file ?? `${binaryName}-${platform}.zip`;
+  const url = getReleaseAssetUrl(fileName);
   await downloadFile(url, zipPath, binaryInfo.sha256, onProgress);
 
   return zipPath;
@@ -243,7 +283,7 @@ export async function ensureDesktopBundle(
 
   // Fetch the desktop manifest
   const manifest = await fetchJson<DesktopManifest>(
-    `${R2_BASE_URL}/binaries/${BINARY_TAG}/tauri/desktop-manifest.json`
+    getReleaseAssetUrl(DESKTOP_MANIFEST_NAME)
   );
   const platformInfo = manifest.platforms?.[tauriPlatform];
   if (!platformInfo) {
@@ -256,7 +296,7 @@ export async function ensureDesktopBundle(
 
   // Skip download if file already exists (e.g. previous failed install)
   if (!fs.existsSync(destPath)) {
-    const url = `${R2_BASE_URL}/binaries/${BINARY_TAG}/tauri/${tauriPlatform}/${platformInfo.file}`;
+    const url = getReleaseAssetUrl(platformInfo.file);
     await downloadFile(url, destPath, platformInfo.sha256, onProgress);
   }
 
@@ -268,8 +308,8 @@ export async function ensureDesktopBundle(
 }
 
 export async function getLatestVersion(): Promise<string | undefined> {
-  const manifest = await fetchJson<BinaryManifest>(
-    `${R2_BASE_URL}/binaries/manifest.json`
+  const metadata = await fetchJson<{ version?: string }>(
+    `https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}/latest`
   );
-  return manifest.latest;
+  return metadata.version;
 }

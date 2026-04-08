@@ -42,6 +42,8 @@ One command. Describe the work, review the diff, ship it.
 npx @raythunder/vibe-kanban
 ```
 
+The npm package is a thin launcher. On first run it downloads the matching platform build from GitHub Releases and then starts Vibe Kanban locally.
+
 
 ## Installation
 
