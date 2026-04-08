@@ -108,6 +108,22 @@ pnpm run build
 1. Run `./local-build.sh`
 2. Test with `cd npx-cli && node bin/cli.js`
 
+### Install a global command from source
+
+To build the local package and register `vibe-kanban` as a global command on
+your machine:
+
+```bash
+pnpm run install:global
+```
+
+After that, you can launch it directly from any terminal:
+
+```bash
+vibe-kanban
+vibe-kanban --help
+```
+
 ### Environment Variables
 
 The following environment variables can be configured at build time or runtime:
