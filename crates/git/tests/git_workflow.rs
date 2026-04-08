@@ -390,8 +390,8 @@ fn worktree_diff_permission_only_change() {
 }
 
 #[test]
-fn squash_merge_libgit2_sets_author_without_user() {
-    // Verify merge_changes (libgit2 path) uses fallback author when no config exists
+fn fast_forward_merge_preserves_feature_commit_author() {
+    // Verify merge_changes preserves the original feature commit metadata.
     use git2::Repository;
 
     let td = TempDir::new().unwrap();
@@ -430,19 +430,13 @@ fn squash_merge_libgit2_sets_author_without_user() {
     create_branch(&repo_path, "dev");
     checkout_branch(&repo_path, "dev");
 
-    // Merge feature -> main (libgit2 squash)
+    // Merge feature -> main without squashing.
     let merge_sha = s
-        .merge_changes(&repo_path, &worktree_path, "feature", "main", "squash")
+        .merge_changes(&repo_path, &worktree_path, "feature", "main", "merge")
         .unwrap();
 
-    // The squash commit author should not be the feature commit's author, and must be present.
+    // The merged commit should still be the original feature commit.
     let (name, email) = get_commit_author(&repo_path, &merge_sha);
-    assert_ne!(name.as_deref(), Some("Other Author"));
-    assert_ne!(email.as_deref(), Some("other@example.com"));
-    if has_global_git_identity() {
-        assert!(name.is_some() && email.is_some());
-    } else {
-        assert_eq!(name.as_deref(), Some("Vibe Kanban"));
-        assert_eq!(email.as_deref(), Some("noreply@vibekanban.com"));
-    }
+    assert_eq!(name.as_deref(), Some("Other Author"));
+    assert_eq!(email.as_deref(), Some("other@example.com"));
 }

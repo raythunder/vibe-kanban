@@ -526,15 +526,9 @@ fn merge_does_not_touch_tracked_uncommitted_changes_in_base_worktree() {
     let wt_repo = Repository::open(&worktree_path).unwrap();
     commit_all(&wt_repo, "feature adds danger2.txt");
 
-    // Merge via service (squash into main) should not modify files in the main worktree
+    // Merge via service should not modify files in the main worktree
     let service = GitService::new();
-    let res = service.merge_changes(
-        &repo_path,
-        &worktree_path,
-        "feature",
-        "main",
-        "squash merge",
-    );
+    let res = service.merge_changes(&repo_path, &worktree_path, "feature", "main", "merge");
     assert!(
         res.is_ok(),
         "merge should succeed without touching worktree"
@@ -564,7 +558,7 @@ fn merge_refuses_with_staged_changes_on_base() {
     // main has staged change
     write_file(&repo_path, "staged.txt", "staged\n");
     add_path(&repo_path, "staged.txt");
-    let res = s.merge_changes(&repo_path, &worktree_path, "feature", "main", "squash");
+    let res = s.merge_changes(&repo_path, &worktree_path, "feature", "main", "merge");
     assert!(res.is_err(), "should refuse merge due to staged changes");
     // staged file remains
     let content = std::fs::read_to_string(repo_path.join("staged.txt")).unwrap();
@@ -586,7 +580,7 @@ fn merge_preserves_unstaged_changes_on_base() {
     commit_all(&wt_repo, "feature merged");
 
     let _sha = s
-        .merge_changes(&repo_path, &worktree_path, "feature", "main", "squash")
+        .merge_changes(&repo_path, &worktree_path, "feature", "main", "merge")
         .unwrap();
     // local edit preserved
     let loc = std::fs::read_to_string(repo_path.join("common.txt")).unwrap();
@@ -597,7 +591,7 @@ fn merge_preserves_unstaged_changes_on_base() {
 }
 
 #[test]
-fn update_ref_does_not_destroy_feature_worktree_dirty_state() {
+fn merge_keeps_feature_worktree_dirty_state() {
     let td = TempDir::new().unwrap();
     let (repo_path, worktree_path) = setup_repo_with_worktree(&td);
     let s = GitService::new();
@@ -610,17 +604,17 @@ fn update_ref_does_not_destroy_feature_worktree_dirty_state() {
     commit_all(&wt_repo, "feat commit");
     // dirty change in feature worktree (uncommitted)
     write_file(&worktree_path, "dirty.txt", "unstaged\n");
-    // merge from feature into main (CLI path updates task ref via update-ref)
+    // merge from feature into main while feature worktree stays dirty
     let sha = s
-        .merge_changes(&repo_path, &worktree_path, "feature", "main", "squash")
+        .merge_changes(&repo_path, &worktree_path, "feature", "main", "merge")
         .unwrap();
     // uncommitted change in feature worktree preserved
     let dirty = std::fs::read_to_string(worktree_path.join("dirty.txt")).unwrap();
     assert_eq!(dirty, "unstaged\n");
-    // feature branch ref updated to the squash commit in main repo
+    // feature branch still points at the merged head commit
     let feature_oid = s.get_branch_oid(&repo_path, "feature").unwrap();
     assert_eq!(feature_oid, sha);
-    // and the feature worktree HEAD now points to that commit
+    // and the feature worktree HEAD still points to that commit
     let head = s.get_head_info(&worktree_path).unwrap();
     assert_eq!(head.branch, "feature");
     assert_eq!(head.oid, sha);
@@ -638,9 +632,9 @@ fn libgit2_merge_updates_base_ref_in_both_repos() {
     let before_main_wt = s.get_branch_oid(&worktree_path, "main").unwrap();
     assert_eq!(before_main_repo, before_main_wt);
 
-    // Perform merge (squash) while main repo is NOT on base branch (libgit2 path)
+    // Perform merge while main repo is NOT on base branch (ref-update path)
     let sha = s
-        .merge_changes(&repo_path, &worktree_path, "feature", "main", "squash")
+        .merge_changes(&repo_path, &worktree_path, "feature", "main", "merge")
         .expect("merge should succeed via libgit2 path");
 
     // Base branch ref advanced in both main and worktree repositories
@@ -651,8 +645,8 @@ fn libgit2_merge_updates_base_ref_in_both_repos() {
 }
 
 #[test]
-fn libgit2_merge_updates_task_ref_and_feature_head_preserves_dirty() {
-    // Hit libgit2 path (main repo not on base) and verify task ref + HEAD update safely
+fn libgit2_merge_preserves_feature_head_and_dirty_state() {
+    // Hit the ref-update path (main repo not on base) and verify feature HEAD stays intact.
     let td = TempDir::new().unwrap();
     let (repo_path, worktree_path) = setup_repo_with_worktree(&td);
     let s = GitService::new();
@@ -660,22 +654,22 @@ fn libgit2_merge_updates_task_ref_and_feature_head_preserves_dirty() {
     // Make an uncommitted change in the feature worktree to ensure it's preserved
     write_file(&worktree_path, "dirty2.txt", "keep me\n");
 
-    // Perform merge (squash) from feature into main; this path uses libgit2
+    // Perform merge from feature into main.
     let sha = s
-        .merge_changes(&repo_path, &worktree_path, "feature", "main", "squash")
+        .merge_changes(&repo_path, &worktree_path, "feature", "main", "merge")
         .expect("merge should succeed via libgit2 path");
 
     // Dirty file preserved in worktree
     let dirty = std::fs::read_to_string(worktree_path.join("dirty2.txt")).unwrap();
     assert_eq!(dirty, "keep me\n");
 
-    // Task branch (feature) updated to squash commit in both repos
+    // Task branch (feature) remains at the merged head in both repos
     let feat_main_repo = s.get_branch_oid(&repo_path, "feature").unwrap();
     let feat_worktree = s.get_branch_oid(&worktree_path, "feature").unwrap();
     assert_eq!(feat_main_repo, sha);
     assert_eq!(feat_worktree, sha);
 
-    // Feature worktree HEAD points to the new squash commit
+    // Feature worktree HEAD still points to the same commit
     let head = s.get_head_info(&worktree_path).unwrap();
     assert_eq!(head.branch, "feature");
     assert_eq!(head.oid, sha);
@@ -785,7 +779,7 @@ fn merge_when_base_ahead_and_feature_ahead_fails() {
     let g = GitService::new();
     let before_main = g.get_branch_oid(&repo_path, "main").unwrap();
 
-    // Attempt to merge (squash) into main - should fail because base is ahead
+    // Attempt to merge into main - should fail because base is ahead
     let service = GitService::new();
     let res = service.merge_changes(
         &repo_path,
@@ -931,9 +925,9 @@ fn merge_refreshes_main_worktree_when_on_base() {
     write_file(&wt, "file.txt", "feature change\n");
     let _ = s.commit(&wt, "feature change").unwrap();
 
-    // Merge into main (squash) and ensure main worktree is updated since it is on base
+    // Merge into main and ensure main worktree is updated since it is on base
     let merge_sha = s
-        .merge_changes(&repo_path, &wt, "feature", "main", "squash")
+        .merge_changes(&repo_path, &wt, "feature", "main", "merge")
         .unwrap();
     // Since main is on base branch and we use safe CLI merge, both working tree
     // and ref should reflect the merged content.
@@ -941,6 +935,47 @@ fn merge_refreshes_main_worktree_when_on_base() {
     assert_eq!(content, "feature change\n");
     let oid = s.get_branch_oid(&repo_path, "main").unwrap();
     assert_eq!(oid, merge_sha);
+}
+
+#[test]
+fn merge_preserves_feature_commit_history_on_main() {
+    let td = TempDir::new().unwrap();
+    let repo_path = td.path().join("repo_history");
+    let s = GitService::new();
+    s.initialize_repo_with_main_branch(&repo_path).unwrap();
+    let repo = Repository::open(&repo_path).unwrap();
+    configure_user(&repo);
+    checkout_branch(&repo, "main");
+
+    write_file(&repo_path, "base.txt", "base\n");
+    let _ = s.commit(&repo_path, "base").unwrap();
+
+    create_branch_from_head(&repo, "feature");
+    let wt = td.path().join("wt_history");
+    s.add_worktree(&repo_path, &wt, "feature", false).unwrap();
+
+    write_file(&wt, "a.txt", "one\n");
+    assert!(s.commit(&wt, "feature one").unwrap());
+    let first = s.get_branch_oid(&wt, "feature").unwrap();
+    write_file(&wt, "b.txt", "two\n");
+    assert!(s.commit(&wt, "feature two").unwrap());
+    let second = s.get_branch_oid(&wt, "feature").unwrap();
+
+    let merge_sha = s
+        .merge_changes(&repo_path, &wt, "feature", "main", "merge")
+        .unwrap();
+
+    assert_eq!(merge_sha, second);
+    assert_eq!(s.get_branch_oid(&repo_path, "main").unwrap(), second);
+
+    let log = GitCli::new()
+        .git(&repo_path, ["log", "--format=%s", "--max-count=3", "main"])
+        .unwrap();
+    let messages: Vec<&str> = log.lines().collect();
+    assert_eq!(messages, vec!["feature two", "feature one", "base"]);
+
+    assert_eq!(s.get_branch_oid(&repo_path, "feature").unwrap(), second);
+    assert_ne!(first, second);
 }
 
 #[test]
