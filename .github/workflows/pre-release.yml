@@ -1025,47 +1025,50 @@ jobs:
           find release-binaries
 
       - name: Flatten release binary assets and build manifest
+        env:
+          RELEASE_BINARIES_DIR: release-binaries
+          RELEASE_ASSETS_DIR: release-assets
         run: |
           mkdir -p release-assets
-          node -e "
-            const crypto = require('crypto');
-            const fs = require('fs');
-            const path = require('path');
+          node <<'NODE'
+          const crypto = require('crypto');
+          const fs = require('fs');
+          const path = require('path');
 
-            const inputDir = 'release-binaries';
-            const outputDir = 'release-assets';
-            const manifest = { platforms: {} };
+          const inputDir = process.env.RELEASE_BINARIES_DIR;
+          const outputDir = process.env.RELEASE_ASSETS_DIR;
+          const manifest = { platforms: {} };
 
-            for (const entry of fs.readdirSync(inputDir, { withFileTypes: true })) {
-              if (!entry.isDirectory()) continue;
+          for (const entry of fs.readdirSync(inputDir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
 
-              const platform = entry.name;
-              const platformDir = path.join(inputDir, platform);
-              manifest.platforms[platform] = {};
+            const platform = entry.name;
+            const platformDir = path.join(inputDir, platform);
+            manifest.platforms[platform] = {};
 
-              for (const fileEntry of fs.readdirSync(platformDir, { withFileTypes: true })) {
-                if (!fileEntry.isFile() || !fileEntry.name.endsWith('.zip')) continue;
+            for (const fileEntry of fs.readdirSync(platformDir, { withFileTypes: true })) {
+              if (!fileEntry.isFile() || !fileEntry.name.endsWith('.zip')) continue;
 
-                const binary = fileEntry.name.replace(/\\.zip$/, '');
-                const sourcePath = path.join(platformDir, fileEntry.name);
-                const releaseFile = `${binary}-${platform}.zip`;
-                const releasePath = path.join(outputDir, releaseFile);
-                const data = fs.readFileSync(sourcePath);
+              const binary = fileEntry.name.replace(/\.zip$/, '');
+              const sourcePath = path.join(platformDir, fileEntry.name);
+              const releaseFile = `${binary}-${platform}.zip`;
+              const releasePath = path.join(outputDir, releaseFile);
+              const data = fs.readFileSync(sourcePath);
 
-                fs.copyFileSync(sourcePath, releasePath);
-                manifest.platforms[platform][binary] = {
-                  file: releaseFile,
-                  sha256: crypto.createHash('sha256').update(data).digest('hex'),
-                  size: data.length
-                };
-              }
+              fs.copyFileSync(sourcePath, releasePath);
+              manifest.platforms[platform][binary] = {
+                file: releaseFile,
+                sha256: crypto.createHash('sha256').update(data).digest('hex'),
+                size: data.length,
+              };
             }
+          }
 
-            fs.writeFileSync(
-              path.join(outputDir, 'binary-manifest.json'),
-              JSON.stringify(manifest, null, 2) + '\\n'
-            );
-          "
+          fs.writeFileSync(
+            path.join(outputDir, 'binary-manifest.json'),
+            JSON.stringify(manifest, null, 2) + '\n'
+          );
+          NODE
 
       - name: Inject release tag into npx-cli
         run: |
