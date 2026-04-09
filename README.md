@@ -126,6 +126,46 @@ vibe-kanban
 vibe-kanban --help
 ```
 
+### Publish the latest pre-release npm package
+
+If GitHub pre-release build has already succeeded and uploaded the `.tgz`
+package asset, you can publish the newest pre-release package to npm locally
+with one command:
+
+```bash
+pnpm run publish:latest-prerelease
+```
+
+This script will:
+
+1. Find the latest GitHub pre-release
+2. Download its `.tgz` npm package asset
+3. Automatically choose the npm tag:
+   - pre-release version -> `next`
+   - stable version -> `latest`
+4. If that version is already on npm:
+   - skip directly when the tag is already correct
+   - otherwise just update the npm tag to point to that version
+
+Useful variants:
+
+```bash
+# force the latest pre-release to publish under the `latest` tag
+pnpm run publish:latest-prerelease:latest
+
+# force the latest pre-release to publish under the `next` tag
+pnpm run publish:latest-prerelease:next
+
+# manually publish under `latest`
+node scripts/publish-latest-prerelease-npm.mjs --tag latest
+
+# test the full flow without actually publishing
+node scripts/publish-latest-prerelease-npm.mjs --dry-run --force
+
+# publish a specific release tag
+node scripts/publish-latest-prerelease-npm.mjs --release-tag v0.1.45-main.1.20260408132428
+```
+
 ### Environment Variables
 
 The following environment variables can be configured at build time or runtime:
