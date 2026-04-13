@@ -253,6 +253,9 @@ impl FileService {
             }
 
             if src.exists() {
+                if let Some(parent) = dst.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
                 if let Err(e) = std::fs::copy(&src, &dst) {
                     tracing::error!("Failed to copy {}: {}", file.file_path, e);
                 } else {
@@ -283,5 +286,56 @@ impl FileService {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use db::models::file::File;
+    use sqlx::SqlitePool;
+    use tempfile::tempdir;
+    use uuid::Uuid;
+
+    use super::FileService;
+
+    #[tokio::test]
+    async fn copy_files_creates_nested_parent_directories() {
+        let cache_dir = tempdir().unwrap();
+        let legacy_cache_dir = tempdir().unwrap();
+        let worktree_dir = tempdir().unwrap();
+        let nested_file_path = "nested/path/upload.png";
+        let cached_file = cache_dir.path().join(nested_file_path);
+        std::fs::create_dir_all(cached_file.parent().unwrap()).unwrap();
+        std::fs::write(&cached_file, b"image-bytes").unwrap();
+
+        let service = FileService {
+            cache_dir: cache_dir.path().to_path_buf(),
+            legacy_cache_dir: legacy_cache_dir.path().to_path_buf(),
+            pool: SqlitePool::connect_lazy("sqlite::memory:").unwrap(),
+            max_size_bytes: 20 * 1024 * 1024,
+        };
+
+        let file = File {
+            id: Uuid::new_v4(),
+            file_path: nested_file_path.to_string(),
+            original_name: "upload.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+            size_bytes: 11,
+            hash: "hash".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        service
+            .copy_files(worktree_dir.path(), vec![file])
+            .expect("copy should succeed");
+
+        let copied_file = worktree_dir
+            .path()
+            .join(utils::path::VIBE_ATTACHMENTS_DIR)
+            .join(nested_file_path);
+        assert!(copied_file.exists());
+        assert_eq!(std::fs::read(copied_file).unwrap(), b"image-bytes");
     }
 }

@@ -89,6 +89,7 @@ pub async fn upload_file(
         process_file_upload(&deployment, multipart, Some(workspace.id)).await?;
 
     let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
+    tokio::fs::create_dir_all(&base_path).await?;
     deployment
         .file()
         .copy_files_by_ids_to_worktree(&base_path, &[attachment_response.id])
