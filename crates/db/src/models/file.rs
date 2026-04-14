@@ -178,6 +178,15 @@ impl WorkspaceAttachment {
         attachment_ids: &[Uuid],
     ) -> Result<(), sqlx::Error> {
         for &attachment_id in attachment_ids {
+            if File::find_by_id(pool, attachment_id).await?.is_none() {
+                tracing::warn!(
+                    "Skipping missing attachment {} while associating workspace {}",
+                    attachment_id,
+                    workspace_id
+                );
+                continue;
+            }
+
             let id = Uuid::new_v4();
             sqlx::query!(
                 r#"INSERT INTO workspace_attachments (id, workspace_id, attachment_id)
@@ -193,5 +202,114 @@ impl WorkspaceAttachment {
             .await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::{Row, SqlitePool};
+    use uuid::Uuid;
+
+    use super::{CreateFile, File, WorkspaceAttachment};
+
+    #[tokio::test]
+    async fn associate_many_dedup_skips_missing_attachments() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        sqlx::query(
+            r#"
+            CREATE TABLE workspaces (
+                id BLOB PRIMARY KEY
+            );
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"
+            CREATE TABLE attachments (
+                id BLOB PRIMARY KEY,
+                file_path TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER NOT NULL,
+                hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'subsec')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now', 'subsec'))
+            );
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"
+            CREATE TABLE workspace_attachments (
+                id BLOB PRIMARY KEY,
+                workspace_id BLOB NOT NULL,
+                attachment_id BLOB NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'subsec')),
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (attachment_id) REFERENCES attachments(id) ON DELETE CASCADE,
+                UNIQUE(workspace_id, attachment_id)
+            );
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let workspace_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO workspaces (id) VALUES (?1)")
+            .bind(workspace_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let existing_attachment = File::create(
+            &pool,
+            &CreateFile {
+                file_path: "existing.png".to_string(),
+                original_name: "existing.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                size_bytes: 123,
+                hash: "hash".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        let missing_attachment_id = Uuid::new_v4();
+
+        WorkspaceAttachment::associate_many_dedup(
+            &pool,
+            workspace_id,
+            &[existing_attachment.id, missing_attachment_id],
+        )
+        .await
+        .unwrap();
+
+        let count = sqlx::query(
+            "SELECT COUNT(*) AS count FROM workspace_attachments WHERE workspace_id = ?1",
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get::<i64, _>("count");
+
+        assert_eq!(count, 1);
+
+        let stored_attachment_id =
+            sqlx::query("SELECT attachment_id FROM workspace_attachments WHERE workspace_id = ?1")
+                .bind(workspace_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+                .get::<Uuid, _>("attachment_id");
+
+        assert_eq!(stored_attachment_id, existing_attachment.id);
     }
 }
