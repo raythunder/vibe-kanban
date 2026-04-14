@@ -22,6 +22,8 @@ import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { SharedAppLayout } from '@/shared/components/ui-new/containers/SharedAppLayout';
 
+const AUTO_SHOW_RELEASE_NOTES_ON_STARTUP = false;
+
 function KeyboardShortcutsHandler() {
   useKeyShowHelp(
     () => {
@@ -39,6 +41,7 @@ function ReleaseNotesHandler() {
   const location = useLocation();
 
   useEffect(() => {
+    if (!AUTO_SHOW_RELEASE_NOTES_ON_STARTUP) return;
     if (!config || !config.remote_onboarding_acknowledged) return;
 
     const pathname = location.pathname;
