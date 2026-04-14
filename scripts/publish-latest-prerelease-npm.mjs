@@ -50,6 +50,30 @@ function runText(command, args, options = {}) {
   }
 }
 
+function tryRunText(command, args, options = {}) {
+  try {
+    return {
+      ok: true,
+      stdout: execFileSync(command, args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...options,
+      }).trim(),
+      stderr: '',
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      fail(`Missing required command: ${command}`);
+    }
+
+    return {
+      ok: false,
+      stdout: error?.stdout?.toString().trim() ?? '',
+      stderr: error?.stderr?.toString().trim() ?? '',
+    };
+  }
+}
+
 function runInteractive(command, args, options = {}) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
@@ -210,24 +234,42 @@ function extractVersionFromTarballName(assetName, tarballPrefix) {
 }
 
 function packageExists(packageName, version) {
-  try {
-    const output = runText('npm', [
-      'view',
-      `${packageName}@${version}`,
-      'version',
-    ]);
-    return output === version;
-  } catch {
+  const result = tryRunText('npm', [
+    'view',
+    `${packageName}@${version}`,
+    'version',
+  ]);
+
+  if (result.ok) {
+    return result.stdout === version;
+  }
+
+  const detail = `${result.stderr}\n${result.stdout}`;
+  if (
+    detail.includes('npm error code E404') ||
+    detail.includes('No match found for version')
+  ) {
     return false;
   }
+
+  fail(
+    `npm view ${packageName}@${version} version failed.\n${result.stderr || result.stdout}`,
+  );
 }
 
 function getDistTags(packageName) {
-  try {
-    return JSON.parse(runText('npm', ['view', packageName, 'dist-tags', '--json']));
-  } catch {
+  const result = tryRunText('npm', [
+    'view',
+    packageName,
+    'dist-tags',
+    '--json',
+  ]);
+
+  if (!result.ok) {
     return {};
   }
+
+  return JSON.parse(result.stdout);
 }
 
 function inferDistTag(version) {
