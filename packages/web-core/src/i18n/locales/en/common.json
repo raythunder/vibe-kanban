@@ -502,6 +502,7 @@
     },
     "repoPicker": {
       "actions": {
+        "addRepo": "Add repository",
         "recent": "Recent",
         "browse": "Browse",
         "create": "Create"

@@ -488,6 +488,7 @@
     },
     "repoPicker": {
       "actions": {
+        "addRepo": "添加儲存庫",
         "recent": "最近",
         "browse": "瀏覽",
         "create": "建立"

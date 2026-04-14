@@ -488,6 +488,7 @@
     },
     "repoPicker": {
       "actions": {
+        "addRepo": "添加仓库",
         "recent": "最近",
         "browse": "浏览",
         "create": "创建"

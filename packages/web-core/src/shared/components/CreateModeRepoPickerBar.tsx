@@ -138,8 +138,8 @@ export function CreateModeRepoPickerBar({
     []
   );
 
-  const addOrReplaceRepoWithBranchSelection = useCallback(
-    async (repo: Repo) => {
+  const selectRepoWithBranchSelection = useCallback(
+    async (repo: Repo, mode: 'add' | 'replace') => {
       if (selectedRepoIds.has(repo.id)) {
         setPickerError('Repository is already selected');
         return false;
@@ -148,7 +148,7 @@ export function CreateModeRepoPickerBar({
       const selectedBranch = await pickBranchForRepo(repo);
       if (!selectedBranch) return false;
 
-      if (isSingleRepoMode) {
+      if (mode === 'replace' && isSingleRepoMode) {
         clearRepos();
       }
 
@@ -196,11 +196,47 @@ export function CreateModeRepoPickerBar({
         );
         if (!selectedRepo) return;
 
-        await addOrReplaceRepoWithBranchSelection(selectedRepo);
+        await selectRepoWithBranchSelection(selectedRepo, 'replace');
       },
       'Failed to load repositories or branches'
     );
-  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, selectedRepoIds]);
+  }, [runPickerAction, selectRepoWithBranchSelection, selectedRepoIds]);
+
+  const handleAddRepo = useCallback(async () => {
+    await runPickerAction(
+      'choose',
+      async () => {
+        const allRepos = await repoApi.listRecent();
+        const availableRepos = allRepos.filter(
+          (repo) => !selectedRepoIds.has(repo.id)
+        );
+
+        if (availableRepos.length === 0) {
+          setPickerError(
+            'No recently used repositories found, please browse repositories instead'
+          );
+          return;
+        }
+
+        const repoResult = (await SelectionDialog.show({
+          initialPageId: 'selectRepo',
+          pages: buildRepoSelectionPages(
+            availableRepos.map(toRepoItem)
+          ) as Record<string, SelectionPage>,
+        })) as RepoSelectionResult | undefined;
+
+        if (!repoResult?.repoId) return;
+
+        const selectedRepo = availableRepos.find(
+          (repo) => repo.id === repoResult.repoId
+        );
+        if (!selectedRepo) return;
+
+        await selectRepoWithBranchSelection(selectedRepo, 'add');
+      },
+      'Failed to load repositories or branches'
+    );
+  }, [runPickerAction, selectRepoWithBranchSelection, selectedRepoIds]);
 
   const handleBrowseRepo = useCallback(async () => {
     await runPickerAction(
@@ -214,11 +250,11 @@ export function CreateModeRepoPickerBar({
 
         const repo = await repoApi.register({ path: selectedPath });
         queryClient.invalidateQueries({ queryKey: ['repos'] });
-        await addOrReplaceRepoWithBranchSelection(repo);
+        await selectRepoWithBranchSelection(repo, 'replace');
       },
       'Failed to register repository'
     );
-  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, t]);
+  }, [runPickerAction, selectRepoWithBranchSelection, t]);
 
   const handleCreateRepo = useCallback(async () => {
     await runPickerAction(
@@ -237,13 +273,13 @@ export function CreateModeRepoPickerBar({
               folder_name: folderName,
             });
             queryClient.invalidateQueries({ queryKey: ['repos'] });
-            await addOrReplaceRepoWithBranchSelection(repo);
+            await selectRepoWithBranchSelection(repo, 'replace');
           },
         });
       },
       'Failed to create repository'
     );
-  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, t]);
+  }, [runPickerAction, selectRepoWithBranchSelection, t]);
 
   const handleChangeBranch = useCallback(
     async (repo: Repo) => {
@@ -347,6 +383,19 @@ export function CreateModeRepoPickerBar({
             )}
             <span>{t('createMode.repoPicker.actions.recent')}</span>
           </button>
+          {isSingleRepoMode && (
+            <button
+              type="button"
+              onClick={handleAddRepo}
+              disabled={isBusy}
+              className={inlineControlButtonClassName}
+            >
+              <PlusIcon className="size-icon-xs" weight="bold" />
+              <span>
+                {t('createMode.repoPicker.actions.addRepo', 'Add repository')}
+              </span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleBrowseRepo}
