@@ -506,6 +506,7 @@
         "browse": "Browse",
         "create": "Create"
       },
+      "singleRepoHint": "Selecting another repository will replace the current one.",
       "setupHintTitle": "Setup Scripts",
       "setupHint": "Tip: Configure setup scripts for this repository in Settings → Repositories",
       "setupHintDismiss": "Dismiss",

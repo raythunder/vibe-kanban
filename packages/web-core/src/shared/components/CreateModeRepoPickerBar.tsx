@@ -75,13 +75,20 @@ export function CreateModeRepoPickerBar({
 }: CreateModeRepoPickerBarProps) {
   const { t } = useTranslation('common');
   const queryClient = useQueryClient();
-  const { repos, targetBranches, addRepo, removeRepo, setTargetBranch } =
-    useCreateMode();
+  const {
+    repos,
+    targetBranches,
+    addRepo,
+    removeRepo,
+    clearRepos,
+    setTargetBranch,
+  } = useCreateMode();
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [branchRepoId, setBranchRepoId] = useState<string | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [setupHintDismissed, setSetupHintDismissed] = useState(false);
   const isBusy = pendingAction !== null;
+  const isSingleRepoMode = repos.length === 1;
 
   const hasUnconfiguredRepo = useMemo(
     () => repos.some((repo) => !repo.setup_script),
@@ -131,7 +138,7 @@ export function CreateModeRepoPickerBar({
     []
   );
 
-  const addRepoWithBranchSelection = useCallback(
+  const addOrReplaceRepoWithBranchSelection = useCallback(
     async (repo: Repo) => {
       if (selectedRepoIds.has(repo.id)) {
         setPickerError('Repository is already selected');
@@ -141,11 +148,22 @@ export function CreateModeRepoPickerBar({
       const selectedBranch = await pickBranchForRepo(repo);
       if (!selectedBranch) return false;
 
+      if (isSingleRepoMode) {
+        clearRepos();
+      }
+
       addRepo(repo);
       setTargetBranch(repo.id, selectedBranch);
       return true;
     },
-    [addRepo, pickBranchForRepo, selectedRepoIds, setTargetBranch]
+    [
+      addRepo,
+      clearRepos,
+      isSingleRepoMode,
+      pickBranchForRepo,
+      selectedRepoIds,
+      setTargetBranch,
+    ]
   );
 
   const handleChooseRepo = useCallback(async () => {
@@ -178,11 +196,11 @@ export function CreateModeRepoPickerBar({
         );
         if (!selectedRepo) return;
 
-        await addRepoWithBranchSelection(selectedRepo);
+        await addOrReplaceRepoWithBranchSelection(selectedRepo);
       },
       'Failed to load repositories or branches'
     );
-  }, [addRepoWithBranchSelection, runPickerAction, selectedRepoIds]);
+  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, selectedRepoIds]);
 
   const handleBrowseRepo = useCallback(async () => {
     await runPickerAction(
@@ -196,11 +214,11 @@ export function CreateModeRepoPickerBar({
 
         const repo = await repoApi.register({ path: selectedPath });
         queryClient.invalidateQueries({ queryKey: ['repos'] });
-        await addRepoWithBranchSelection(repo);
+        await addOrReplaceRepoWithBranchSelection(repo);
       },
       'Failed to register repository'
     );
-  }, [addRepoWithBranchSelection, runPickerAction, t]);
+  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, t]);
 
   const handleCreateRepo = useCallback(async () => {
     await runPickerAction(
@@ -219,13 +237,13 @@ export function CreateModeRepoPickerBar({
               folder_name: folderName,
             });
             queryClient.invalidateQueries({ queryKey: ['repos'] });
-            await addRepoWithBranchSelection(repo);
+            await addOrReplaceRepoWithBranchSelection(repo);
           },
         });
       },
       'Failed to create repository'
     );
-  }, [addRepoWithBranchSelection, runPickerAction, t]);
+  }, [addOrReplaceRepoWithBranchSelection, runPickerAction, t]);
 
   const handleChangeBranch = useCallback(
     async (repo: Repo) => {
@@ -300,6 +318,14 @@ export function CreateModeRepoPickerBar({
         )}
 
         <div className="mt-base flex flex-wrap items-center gap-half">
+          {isSingleRepoMode && (
+            <p className="w-full text-sm text-low">
+              {t(
+                'createMode.repoPicker.singleRepoHint',
+                'Selecting another repository will replace the current one.'
+              )}
+            </p>
+          )}
           <button
             type="button"
             onClick={handleChooseRepo}
