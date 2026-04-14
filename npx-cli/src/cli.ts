@@ -130,20 +130,8 @@ async function extractAndRun(
   const binPath = path.join(versionCacheDir, binName);
   const zipPath = path.join(versionCacheDir, `${baseName}.zip`);
 
-  // Clean old binary if exists
-  try {
-    if (fs.existsSync(binPath)) {
-      fs.unlinkSync(binPath);
-    }
-  } catch (err: unknown) {
-    if (process.env.VIBE_KANBAN_DEBUG) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Warning: Could not delete existing binary: ${msg}`);
-    }
-  }
-
   // Download if not cached
-  if (!fs.existsSync(zipPath)) {
+  if (!fs.existsSync(binPath) && !fs.existsSync(zipPath)) {
     console.error(`Downloading ${baseName}...`);
     try {
       await ensureBinary(platformDir, baseName, showProgress);
